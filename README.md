@@ -1,157 +1,262 @@
-# QuickCommerce Smart Price Assistant
+# CartIQ 🛒
 
-A WhatsApp-first grocery price comparison bot that aggregates prices from **Blinkit**, **Zepto**, and **Instamart** in real-time, helping users find the cheapest options with zero friction.
+> **Smart grocery price assistant on WhatsApp.**  
+> Send your grocery list → CartIQ compares prices across **Blinkit**, **Zepto** and **Instamart** in real time and replies with the cheapest option — per item and as a full cart.
+
+---
+
+## Demo
+
+```
+You:     milk, bread, eggs
+CartIQ:  🔍 Price Comparison
+
+         📦 Milk
+           🟡 Blinkit:   ₹32.00
+           🟣 Zepto:     ₹27.00 ✅
+           🟠 Instamart: ₹33.00
+
+         📦 Bread
+           🟡 Blinkit:   ₹38.00 ✅
+           🟣 Zepto:     ₹44.00
+           🟠 Instamart: ₹40.00
+
+         ─────────────────────
+         🛒 Best Split Cart (Cheapest Overall)
+           • Milk  → ZEPTO    ₹27.00 ✅
+           • Bread → BLINKIT  ₹38.00 ✅
+
+         💰 Total: ₹65.00
+
+         👉 Open Apps:
+           🟣 [ZEPTO]   https://www.zeptonow.com/...
+           🟡 [BLINKIT] https://blinkit.com/...
+```
+
+---
+
+## Features
+
+| Feature | Details |
+|---------|---------|
+| 🔍 Price comparison | Live prices from Blinkit, Zepto, Instamart |
+| 🛒 Split cart | Cheapest platform per individual item |
+| 📱 Single-app cart | Best one-app option with savings comparison |
+| 🔔 Price alerts | `alert milk < 60` — notifies when price drops |
+| 📍 Location-aware | `location Mumbai` personalises results |
+| ⚡ Redis cache | 7-minute TTL to prevent redundant API calls |
+| 🧠 Fuzzy matching | Jaccard + Levenshtein for messy grocery names |
+| 🔄 Parallel fetch | Kotlin coroutines — all platforms hit simultaneously |
+| 🔒 HMAC validation | Meta `X-Hub-Signature-256` webhook signature check |
+| 🗄️ Price history | Every fetch persisted to `price_snapshots` in PostgreSQL |
+
+---
 
 ## Architecture
 
 ```
-User (WhatsApp)
-       ↓
-WhatsApp Cloud API (Meta)
-       ↓
-Webhook Controller (Spring Boot)
-       ↓
-Orchestrator Service
-       ↓
-┌─────────────────────────────────┐
-│    Price Aggregation Layer      │
-│  (BlinkitClient | ZeptoClient   │
-│   | InstamartClient)  ← parallel│
-└─────────────────────────────────┘
-       ↓
-Normalization + Matching Engine
-       ↓
-Decision Engine
-       ↓
-Redis Cache (7-min TTL)
-       ↓
-Response Formatter (WhatsApp UX)
-       ↓
-WhatsApp API → User
+WhatsApp User
+      │
+      ▼
+Meta Cloud API
+      │  POST /webhook  (HMAC-SHA256 validated)
+      ▼
+WebhookSignatureFilter  ──► 401 if signature invalid
+      │
+      ▼
+WhatsAppWebhookController
+      │
+      ▼
+OrchestratorService  (routes: location / alert / price query)
+      │
+      ├── NormalizationEngine   (tokenize → Levenshtein/Jaccard match)
+      │
+      ├── PriceAggregator       (coroutine scope — all platforms in parallel)
+      │     ├── BlinkitClient
+      │     ├── ZeptoClient
+      │     └── InstamartClient
+      │
+      ├── PriceCacheService     (Redis, 7-min TTL)
+      ├── PriceSnapshotRepository  (PostgreSQL — price history)
+      │
+      ├── DecisionEngine        (split cart + best single-app cart)
+      │
+      └── ResponseFormatter     (WhatsApp-friendly text + deep links)
+            │
+            ▼
+      WhatsAppService  ──► Meta Cloud API ──► User
 ```
 
-## Features
-
-| Feature | Description |
-|---|---|
-| 🔍 Price comparison | Compare prices across Blinkit, Zepto, Instamart instantly |
-| 🛒 Split cart optimization | Pick cheapest platform per item |
-| 📱 Single app cart | Best platform if you want one app |
-| 🔔 Price alerts | Notify when item drops below target |
-| 📍 Location-aware | Set city for relevant prices |
-| ⚡ Redis caching | 7-min cache to avoid rate limits |
-| 🧠 Fuzzy matching | Jaccard + Levenshtein to handle naming variations |
-| 🔄 Async fetching | Kotlin coroutines for parallel platform calls |
+---
 
 ## Tech Stack
 
-- **Backend**: Spring Boot 3 + Kotlin
-- **Coroutines**: `kotlinx-coroutines-core` for parallel platform calls
-- **Cache**: Redis (Lettuce)
-- **DB**: PostgreSQL (JPA/Hibernate)
-- **HTTP**: WebFlux WebClient
-- **Matching**: Apache Commons Text (Levenshtein)
-- **Messaging**: Meta WhatsApp Cloud API
+| Layer | Technology |
+|-------|-----------|
+| Language | Kotlin 1.9 |
+| Framework | Spring Boot 3.2.5 |
+| Async | kotlinx-coroutines |
+| Database | PostgreSQL 16 (JPA / Hibernate) |
+| Cache | Redis 7 (Lettuce) |
+| HTTP Client | WebFlux WebClient |
+| NLP Matching | Apache Commons Text (Levenshtein) |
+| Messaging | Meta WhatsApp Cloud API |
+| Containers | Docker + Docker Compose |
 
-## Quick Start
-
-### 1. Set environment variables
-
-```bash
-export WHATSAPP_PHONE_NUMBER_ID=<your-phone-number-id>
-export WHATSAPP_ACCESS_TOKEN=<your-access-token>
-export WHATSAPP_VERIFY_TOKEN=your-webhook-verify-token
-```
-
-### 2. Run with Docker Compose
-
-```bash
-docker-compose up --build
-```
-
-### 3. Expose webhook (ngrok for local dev)
-
-```bash
-ngrok http 8080
-# Set webhook URL in Meta Developer Console: https://<ngrok-url>/webhook
-```
-
-## Bot Commands
-
-| Message | Action |
-|---|---|
-| `milk, bread, eggs` | Compare prices for listed items |
-| `location Mumbai` | Set your delivery location |
-| `alert milk < 60` | Alert when milk drops below ₹60 |
-| `help` | Show usage guide |
-
-## Sample WhatsApp Response
-
-```
-🔍 *Price Comparison*
-
-📦 *Milk*
-  🟡 Blinkit: ₹32.00
-  🟣 Zepto: ₹27.00 ✅
-  🟠 Instamart: ₹33.00
-
-📦 *Bread*
-  🟡 Blinkit: ₹38.00 ✅
-  🟣 Zepto: ₹44.00
-  🟠 Instamart: ₹40.00
-
-─────────────────────
-🛒 *Best Split Cart (Cheapest Overall)*
-  • Milk → ZEPTO ₹27.00 ✅
-  • Bread → BLINKIT ₹38.00 ✅
-
-💰 *Total: ₹65.00*
-
-👉 *Open Apps:*
-  🟣 [ZEPTO] https://www.zeptonow.com/...
-  🟡 [BLINKIT] https://blinkit.com/...
-```
+---
 
 ## Project Structure
 
 ```
-src/main/kotlin/com/quickcommerce/assistant/
-├── QuickCommerceApplication.kt     # Entry point
+src/main/kotlin/com/cartiq/assistant/
+├── CartIQApplication.kt
 ├── config/
-│   └── AppConfig.kt                # ObjectMapper, Redis, Scheduling
+│   ├── AppConfig.kt                  # ObjectMapper, Redis, @EnableScheduling
+│   └── WebhookSignatureFilter.kt     # HMAC-SHA256 signature validation
 ├── controller/
-│   ├── WhatsAppWebhookController.kt # GET (verify) + POST (receive messages)
+│   ├── WhatsAppWebhookController.kt  # GET verify + POST receive
 │   └── HealthController.kt
 ├── service/
-│   ├── OrchestratorService.kt      # Brain: routes messages, coordinates pipeline
-│   ├── UserService.kt              # User management
-│   ├── AlertService.kt             # Price alerts + scheduled checks
-│   └── WhatsAppService.kt          # Send messages via Meta API
+│   ├── OrchestratorService.kt        # Message router + pipeline coordinator
+│   ├── UserService.kt                # getOrCreate, setLocation
+│   ├── AlertService.kt               # createAlert + @Scheduled checker
+│   └── WhatsAppService.kt            # Meta Cloud API sender
 ├── aggregator/
-│   └── PriceAggregator.kt          # Parallel coroutine-based fetching
+│   └── PriceAggregator.kt            # fetchAll (1 item) + fetchAllItems (N items)
 ├── client/
-│   ├── PlatformClient.kt           # Interface (Adapter pattern)
+│   ├── PlatformClient.kt             # Interface — add new platforms here
 │   ├── BlinkitClient.kt
 │   ├── ZeptoClient.kt
 │   └── InstamartClient.kt
 ├── engine/
-│   ├── NormalizationEngine.kt      # Tokenization, Levenshtein, Jaccard
-│   └── DecisionEngine.kt           # Split cart + single app cart logic
+│   ├── NormalizationEngine.kt        # Tokenization + fuzzy matching
+│   └── DecisionEngine.kt             # Split cart + single-app logic
 ├── cache/
-│   └── PriceCacheService.kt        # Redis get/put/evict with 7-min TTL
+│   └── PriceCacheService.kt          # Redis get / put / evict
 ├── formatter/
-│   └── ResponseFormatter.kt        # WhatsApp-friendly text output
+│   └── ResponseFormatter.kt          # WhatsApp text formatting
 └── model/
-    ├── Models.kt                   # JPA entities + in-memory DTOs
-    └── Repositories.kt             # Spring Data JPA repositories
+    ├── Models.kt                     # JPA entities + in-memory DTOs
+    └── Repositories.kt               # Spring Data JPA repositories
 ```
 
-## Adding a New Platform
+---
 
-1. Create `client/MyPlatformClient.kt` implementing `PlatformClient`
-2. Add it to the Spring context (`@Component`)
-3. Add `@Value` config keys in `application.yml`
-4. The `PriceAggregator` auto-discovers all `PlatformClient` beans
+## Getting Started
+
+### Prerequisites
+
+- **Docker Desktop** — [download](https://www.docker.com/products/docker-desktop/)
+- **ngrok** (for local webhook testing) — [download](https://ngrok.com/download)
+- **Meta WhatsApp Business API credentials** — see [Step 2](#step-2--get-whatsapp-credentials) below
+
+---
+
+### Step 1 — Clone the repo
+
+```bash
+git clone https://github.com/TAPU-RANJAN-NAHAK/CartIQ.git
+cd CartIQ
+```
+
+---
+
+### Step 2 — Get WhatsApp credentials
+
+1. Go to **https://developers.facebook.com** → **My Apps** → **Create App**
+2. Choose **Business** type → give it a name (e.g. *CartIQ*)
+3. Add the **WhatsApp** product to your app
+4. Under **WhatsApp → API Setup**, note:
+   - `Phone Number ID` → your `WHATSAPP_PHONE_NUMBER_ID`
+   - `Temporary access token` (or create a permanent one via System User) → `WHATSAPP_ACCESS_TOKEN`
+5. Under **App Settings → Basic**, copy:
+   - `App Secret` → your `WHATSAPP_APP_SECRET`
+6. Under **WhatsApp → Configuration**, you'll set the webhook URL in Step 5
+
+---
+
+### Step 3 — Create your `.env` file
+
+```bash
+# In the project root — this file is gitignored, never commit it
+cat > .env << 'EOF'
+WHATSAPP_PHONE_NUMBER_ID=your_phone_number_id_here
+WHATSAPP_ACCESS_TOKEN=your_access_token_here
+WHATSAPP_VERIFY_TOKEN=cartiq-verify-token
+WHATSAPP_APP_SECRET=your_app_secret_here
+EOF
+```
+
+> **Tip:** Leave `WHATSAPP_APP_SECRET` blank while testing locally to skip signature validation.
+
+---
+
+### Step 4 — Start the stack
+
+```bash
+docker compose up --build
+```
+
+This starts:
+- `app` — CartIQ Spring Boot server on `http://localhost:8080`
+- `db` — PostgreSQL 16 on port `5432`
+- `redis` — Redis 7 on port `6379`
+
+Verify it's healthy:
+```bash
+curl http://localhost:8080/actuator/health
+# {"status":"UP"}
+```
+
+---
+
+### Step 5 — Expose localhost to the internet (ngrok)
+
+Meta needs a public HTTPS URL to deliver webhook events:
+
+```bash
+ngrok http 8080
+```
+
+Copy the `https://xxxx.ngrok-free.app` URL.
+
+Back in the Meta Developer Console → **WhatsApp → Configuration**:
+- **Callback URL**: `https://xxxx.ngrok-free.app/webhook`
+- **Verify token**: `cartiq-verify-token` (matches your `.env`)
+- Click **Verify and Save**
+- Subscribe to the **messages** webhook field
+
+---
+
+### Step 6 — Add your phone as a test recipient
+
+In **WhatsApp → API Setup**, add your personal WhatsApp number as a recipient (Meta requires this for free-tier testing).
+
+---
+
+### Step 7 — Send your first message
+
+Open WhatsApp and send a message to your registered test number:
+
+| You send | CartIQ replies |
+|----------|---------------|
+| `hi` | Help menu |
+| `location Delhi` | 📍 Location set |
+| `milk, bread, eggs` | Full price comparison |
+| `alert milk < 30` | ✅ Alert created |
+
+---
+
+## Bot Commands Reference
+
+| Command | Example | What it does |
+|---------|---------|-------------|
+| Grocery list | `milk, bread, eggs` | Compare prices across all 3 platforms |
+| Set location | `location Mumbai` | Personalise results for your city |
+| Set alert | `alert milk < 60` | Notify when milk drops below ₹60 |
+| Help | `hi` / `help` / `hello` | Show usage guide |
+
+---
 
 ## Running Tests
 
@@ -159,11 +264,51 @@ src/main/kotlin/com/quickcommerce/assistant/
 ./gradlew test
 ```
 
+19 unit tests covering: DecisionEngine, NormalizationEngine, ResponseFormatter.
+
+---
+
+## Adding a New Platform
+
+1. Create `client/MyPlatformClient.kt` implementing `PlatformClient`:
+   ```kotlin
+   @Component
+   class MyPlatformClient : PlatformClient {
+       override fun search(query: String, location: String): List<PriceResult> { ... }
+   }
+   ```
+2. Add config keys to `application.yml` and `docker-compose.yml`
+3. `PriceAggregator` auto-discovers all `PlatformClient` beans — no other changes needed ✅
+
+---
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `WHATSAPP_PHONE_NUMBER_ID` | ✅ | — | Meta phone number ID |
+| `WHATSAPP_ACCESS_TOKEN` | ✅ | — | Meta API access token |
+| `WHATSAPP_VERIFY_TOKEN` | ✅ | `cartiq-verify-token` | Webhook verification token |
+| `WHATSAPP_APP_SECRET` | ⚠️ Recommended | *(blank = skip validation)* | HMAC-SHA256 signature secret |
+| `DATABASE_URL` | — | `jdbc:postgresql://localhost:5432/cartiq` | PostgreSQL URL |
+| `DB_USER` | — | `qc` | DB username |
+| `DB_PASSWORD` | — | `qcpass` | DB password |
+| `REDIS_HOST` | — | `localhost` | Redis host |
+| `REDIS_PORT` | — | `6379` | Redis port |
+
+---
+
 ## Scaling Roadmap
 
-| Phase | Users | Changes |
-|---|---|---|
-| MVP | 0–100 | Single server, mock platform adapters |
-| V2 | 1K | Redis mandatory, real platform APIs |
-| V3 | 10K+ | Microservices split, proxy rotation |
-| V4 | 100K+ | Event-driven (Kafka), ML-based matching |
+| Phase | Users | Focus |
+|-------|-------|-------|
+| **MVP** | 0–100 | Mock platform adapters, single server |
+| **V2** | ~1K | Real platform API / scraper clients |
+| **V3** | ~10K | Horizontal scaling, connection pooling, rate limiting |
+| **V4** | 100K+ | Event-driven (Kafka), ML-based item matching, multi-language |
+
+---
+
+## License
+
+MIT

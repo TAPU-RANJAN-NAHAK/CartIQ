@@ -6,14 +6,15 @@ services:
     ports:
       - "8080:8080"
     environment:
-      DATABASE_URL: jdbc:postgresql://db:5432/quickcommerce
+      DATABASE_URL: jdbc:postgresql://db:5432/cartiq
       DB_USER: qc
       DB_PASSWORD: qcpass
       REDIS_HOST: redis
       REDIS_PORT: 6379
       WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID}
       WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN}
-      WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-quickcommerce-verify-token}
+      WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-cartiq-verify-token}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
       BLINKIT_API_KEY: ${BLINKIT_API_KEY:-mock}
       ZEPTO_API_KEY: ${ZEPTO_API_KEY:-mock}
       INSTAMART_API_KEY: ${INSTAMART_API_KEY:-mock}
@@ -26,7 +27,7 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: quickcommerce
+      POSTGRES_DB: cartiq
       POSTGRES_USER: qc
       POSTGRES_PASSWORD: qcpass
     ports:
