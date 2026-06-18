@@ -1,0 +1,67 @@
+spring:
+  application:
+    name: cartiq
+
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/quickcommerce}
+    username: ${DB_USER:qc}
+    password: ${DB_PASSWORD:qcpass}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 4
+
+server:
+  port: ${PORT:8080}
+
+whatsapp:
+  api:
+    base-url: https://graph.facebook.com/v19.0
+    phone-number-id: ${WHATSAPP_PHONE_NUMBER_ID}
+    access-token: ${WHATSAPP_ACCESS_TOKEN}
+  webhook:
+    verify-token: ${WHATSAPP_VERIFY_TOKEN:cartiq-verify-token}
+    # Set WHATSAPP_APP_SECRET to enable HMAC-SHA256 signature validation.
+    # Leave blank (default) to disable — useful for local development.
+    app-secret: ${WHATSAPP_APP_SECRET:}
+
+platforms:
+  blinkit:
+    base-url: ${BLINKIT_BASE_URL:https://api.blinkit.com}
+    api-key: ${BLINKIT_API_KEY:mock}
+  zepto:
+    base-url: ${ZEPTO_BASE_URL:https://api.zepto.com}
+    api-key: ${ZEPTO_API_KEY:mock}
+  instamart:
+    base-url: ${INSTAMART_BASE_URL:https://api.swiggy.com/instamart}
+    api-key: ${INSTAMART_API_KEY:mock}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.quickcommerce: INFO
+    org.springframework.web: WARN
