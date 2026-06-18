@@ -7,5 +7,5 @@ import java.time.Instant
 @RestController
 class HealthController {
     @GetMapping("/")
-    fun root() = mapOf("status" to "ok", "service" to "QuickCommerce Price Assistant", "ts" to Instant.now())
+    fun root() = mapOf("status" to "ok", "service" to "CartIQ", "ts" to Instant.now())
 }
